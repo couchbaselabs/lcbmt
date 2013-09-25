@@ -12,12 +12,14 @@ static int ThreadCount = 4;
 static int ValueSize = 48;
 static int SecondsRuntime = 0;
 static int BatchSize = 1;
+static const char *Hostname = "localhost:8091";
 
 static cliopts_entry entries[] = {
     { 't', "threads", CLIOPTS_ARGT_INT, &ThreadCount },
     { 0, "vsize", CLIOPTS_ARGT_INT, &ValueSize },
     { 'T', "time", CLIOPTS_ARGT_INT, &SecondsRuntime },
     { 's', "schedsize", CLIOPTS_ARGT_INT, &BatchSize },
+    { 'H', "host", CLIOPTS_ARGT_STRING, &Hostname },
     { 0, NULL }
 };
 
@@ -30,7 +32,10 @@ typedef struct {
     pthread_t thr;
     const lcb_store_cmd_t *store_p;
     const lcb_get_cmd_t *get_p;
+    lcb_get_cmd_t gcmd;
+    lcb_store_cmd_t scmd;
     int ix;
+    char kbuf[4096];
 } my_info;
 
 static void *stats_dumper(void *arg)
@@ -64,9 +69,10 @@ static void storage_callback(lcb_t instance, const void *cookie,
                              lcb_storage_t op, lcb_error_t err,
                              const lcb_store_resp_t *resp)
 {
+    my_info *info = (my_info *)cookie;
     assert(err == LCB_SUCCESS);
     assert(resp->version == 0);
-    assert(resp->v.v0.nkey == 3);
+    assert(resp->v.v0.nkey == info->scmd.v.v0.nkey);
     global_opcount++;
 
     /** sanity check to ensure our response data is ok */
@@ -75,9 +81,10 @@ static void storage_callback(lcb_t instance, const void *cookie,
 static void get_callback(lcb_t instance, const void *cookie,
                          lcb_error_t err, const lcb_get_resp_t *resp)
 {
+    my_info *info = (my_info *)cookie;
     assert(err == LCB_SUCCESS);
     assert(resp->version == 0);
-    assert(resp->v.v0.nkey == 3);
+    assert(resp->v.v0.nkey == info->gcmd.v.v0.nkey);
     global_opcount++;
 }
 
@@ -128,7 +135,7 @@ static lcb_t setup_instance(lcb_io_opt_t io)
 
     cropts.version = 1;
     cropts.v.v1.io = io;
-    cropts.v.v1.host = "localhost:8091";
+    cropts.v.v1.host = Hostname;
     err = lcb_create(&instance, &cropts);
     assert(err == LCB_SUCCESS);
 
@@ -150,8 +157,6 @@ int main(int argc, char **argv)
     lcb_io_opt_t io;
     my_info *info_list;
     struct lcb_mt_callback_table cbtable = { 0 };
-    lcb_store_cmd_t scmd = { 0 };
-    lcb_get_cmd_t gcmd = { 0 };
     char *value;
     pthread_t stats_thr;
     int argpos;
@@ -162,18 +167,6 @@ int main(int argc, char **argv)
 
     info_list = calloc(ThreadCount, sizeof(*info_list));
     value = calloc(ValueSize, sizeof(*value));
-
-    /**
-     * Create the operation;
-     */
-    scmd.v.v0.key = "abc";
-    scmd.v.v0.bytes = value;
-    scmd.v.v0.nkey = 3;
-    scmd.v.v0.nbytes = ValueSize;
-    scmd.v.v0.operation = LCB_SET;
-
-    gcmd.v.v0.key = "abc";
-    gcmd.v.v0.nkey = 3;
 
     global_begin_time = time(NULL);
     err = lcb_create_io_ops(&io, NULL);
@@ -195,8 +188,18 @@ int main(int argc, char **argv)
         info->instance = instance;
         info->mt = ctx;
         info->token = lcb_mt_token_create(ctx);
-        info->store_p = &scmd;
-        info->get_p = &gcmd;
+        info->store_p = &info->scmd;
+        info->get_p = &info->gcmd;
+
+        sprintf(info->kbuf, "ThrKey:%d\n", ii);
+        info->gcmd.v.v0.key = info->kbuf;
+        info->gcmd.v.v0.nkey = strlen(info->kbuf);
+        info->scmd.v.v0.key = info->gcmd.v.v0.key;
+        info->scmd.v.v0.nkey = info->gcmd.v.v0.nkey;
+        info->scmd.v.v0.bytes = value;
+        info->scmd.v.v0.nbytes = ValueSize;
+        info->scmd.v.v0.operation = LCB_SET;
+
         pthread_create(&info->thr, NULL, pthr_run, info);
     }
 

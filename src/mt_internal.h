@@ -86,7 +86,7 @@ int lcbmt_negotiate_server(lcbmt_ctx_t *proxy);
  */
 void lcbmt_internal_callback(lcbmt_ctx_t *);
 
-typedef struct lcbmt_ctx_st {
+struct lcbmt_ctx_st {
     LCBMT_CTX_FIELDS
 
     lcb_socket_t sock_lsn;
@@ -127,9 +127,9 @@ typedef struct lcbmt_ctx_st {
     unsigned long fast_count;
     unsigned long max_queue;
 
-} lcbmt_ctx_t;
+};
 
-typedef struct lcbmt_token_st {
+struct lcbmt_token_st {
     LCBMT_TOKEN_FIELDS
 
 
@@ -149,6 +149,6 @@ typedef struct lcbmt_token_st {
         lcb_http_request_t htreq;
     } u_cb_special;
 
-} *lcbmt_token_t;
+};
 
 #endif

@@ -1,0 +1,7 @@
+This project grew out of the 'lcb-cxx' project, which featured a simple
+threading implementation.
+
+To this end, I backported much of the logic over to ANSI C, and hope to
+make the lcb-cxx stuff depend on this.
+
+TODO: Windows support, tests, better abstractions for sockets
